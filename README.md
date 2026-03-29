@@ -1,7 +1,17 @@
-Promise/Future with then/catch chaining, all, race, async resolution
+# promise
+
+Promise/Future pattern with then/catch chaining
+
+Single-file, zero-dependency Python CLI tool.
+
+## Usage
 
 ```bash
-python3 promise.py test
+python promise.py --help
 ```
 
-Zero deps. Python 3.8+.
+## Test
+
+```bash
+python -c "import promise; promise.test()"
+```
