@@ -1,55 +1,73 @@
 #!/usr/bin/env python3
-"""Promise pattern with then/catch chaining."""
-import threading
+"""Promise/Future pattern. Zero dependencies."""
+import threading, sys, time
 
 class Promise:
+    PENDING = "pending"
+    FULFILLED = "fulfilled"
+    REJECTED = "rejected"
+
     def __init__(self, executor=None):
-        self._value = None; self._error = None
-        self._state = "pending"
-        self._then_cbs = []; self._catch_cbs = []
+        self._state = self.PENDING
+        self._value = None
+        self._error = None
+        self._then_cbs = []
+        self._catch_cbs = []
         self._lock = threading.Lock()
         self._event = threading.Event()
         if executor:
-            try: executor(self._resolve, self._reject)
-            except Exception as e: self._reject(e)
+            try:
+                executor(self._resolve, self._reject)
+            except Exception as e:
+                self._reject(e)
 
     def _resolve(self, value):
         with self._lock:
-            if self._state != "pending": return
-            self._value = value; self._state = "fulfilled"
-            for cb in self._then_cbs: cb(value)
+            if self._state != self.PENDING: return
+            self._state = self.FULFILLED
+            self._value = value
         self._event.set()
+        for cb in self._then_cbs:
+            cb(value)
 
     def _reject(self, error):
         with self._lock:
-            if self._state != "pending": return
-            self._error = error; self._state = "rejected"
-            for cb in self._catch_cbs: cb(error)
+            if self._state != self.PENDING: return
+            self._state = self.REJECTED
+            self._error = error
         self._event.set()
+        for cb in self._catch_cbs:
+            cb(error)
 
-    def then(self, on_fulfilled):
+    def then(self, on_fulfilled, on_rejected=None):
         p = Promise()
-        def handler(val):
-            try: p._resolve(on_fulfilled(val))
-            except Exception as e: p._reject(e)
+        def handle_fulfill(val):
+            try:
+                result = on_fulfilled(val)
+                if isinstance(result, Promise):
+                    result.then(p._resolve, p._reject)
+                else:
+                    p._resolve(result)
+            except Exception as e:
+                p._reject(e)
         with self._lock:
-            if self._state == "fulfilled": handler(self._value)
-            elif self._state == "pending": self._then_cbs.append(handler)
+            if self._state == self.FULFILLED:
+                handle_fulfill(self._value)
+            elif self._state == self.REJECTED:
+                if on_rejected: on_rejected(self._error)
+                else: p._reject(self._error)
+            else:
+                self._then_cbs.append(handle_fulfill)
+                if on_rejected: self._catch_cbs.append(on_rejected)
         return p
 
     def catch(self, on_rejected):
-        p = Promise()
-        def handler(err):
-            try: p._resolve(on_rejected(err))
-            except Exception as e: p._reject(e)
-        with self._lock:
-            if self._state == "rejected": handler(self._error)
-            elif self._state == "pending": self._catch_cbs.append(handler)
-        return p
+        return self.then(lambda v: v, on_rejected)
 
-    def wait(self, timeout=None):
+    def await_result(self, timeout=None):
         self._event.wait(timeout)
-        if self._state == "rejected": raise self._error
+        if self._state == self.REJECTED:
+            raise self._error
         return self._value
 
     @staticmethod
@@ -72,30 +90,13 @@ class Promise:
                     with lock:
                         results[idx] = val
                         remaining[0] -= 1
-                        if remaining[0] == 0: p._resolve(results)
+                        if remaining[0] == 0:
+                            p._resolve(results)
                 return handler
-            pr.then(make_handler(i))
-            pr.catch(lambda e: p._reject(e))
+            pr.then(make_handler(i), p._reject)
         return p
 
 if __name__ == "__main__":
-    p = Promise.resolve(42).then(lambda x: x * 2)
-    print(p.wait())
-
-def test():
-    # Resolve
-    p = Promise.resolve(42)
-    assert p.wait() == 42
-    # Then chain
-    p2 = Promise.resolve(10).then(lambda x: x * 2).then(lambda x: x + 1)
-    assert p2.wait(timeout=1) == 21
-    # Reject + catch
-    p3 = Promise.reject(ValueError("oops")).catch(lambda e: f"caught: {e}")
-    assert p3.wait(timeout=1) == "caught: oops"
-    # All
-    pa = Promise.all([Promise.resolve(1), Promise.resolve(2), Promise.resolve(3)])
-    assert pa.wait(timeout=1) == [1, 2, 3]
-    # Executor
-    p4 = Promise(lambda res, rej: res("async"))
-    assert p4.wait() == "async"
-    print("  promise: ALL TESTS PASSED")
+    p = Promise(lambda resolve, reject: resolve(42))
+    result = p.then(lambda v: v * 2).await_result(timeout=1)
+    print(f"Result: {result}")

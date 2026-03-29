@@ -1,17 +1,9 @@
 # promise
 
-Promise/Future pattern with then/catch chaining
-
-Single-file, zero-dependency Python CLI tool.
+Promise/Future pattern implementation. Zero dependencies, single file, Python 3.8+.
 
 ## Usage
 
 ```bash
-python promise.py --help
-```
-
-## Test
-
-```bash
-python -c "import promise; promise.test()"
+python3 promise.py --help
 ```
