@@ -1,13 +1,7 @@
-# Promise/Future Library
-
-Promise/Future Library — zero-dependency, single-file Python CLI.
-
-## Usage
+Promise/Future with then/catch chaining, all, race, async resolution
 
 ```bash
-python3 promise.py --help
+python3 promise.py test
 ```
 
-## License
-
-MIT
+Zero deps. Python 3.8+.
